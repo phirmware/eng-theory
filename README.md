@@ -65,6 +65,24 @@ do that before clearing site data.
 **Progress is per-device.** Practising on your phone and your laptop gives you two
 independent schedules. Export from one and import into the other to sync.
 
+## Go deeper
+
+After answering, each question offers a generated prompt for a follow-up with an
+AI tool. It carries the stem and code, all four options, the correct answer,
+**which option you picked and whether you were confident**, and the explanation
+you were just shown — then asks for the underlying mechanism, why your specific
+wrong answer was tempting, a concrete example, and what to learn next. It also
+asks the model to flag anything in the explanation that is wrong or
+oversimplified.
+
+- **Copy prompt** / **Share** send the full version, including the explanation.
+- **Open in** links (Claude, ChatGPT, Perplexity, Google AI Mode) carry a compact
+  version, because the prompt travels in the query string.
+
+`pnpm validate` fails a question whose compact prompt would exceed the 2048-char
+deep-link budget, so new content cannot silently break those links. Google AI
+Mode is region- and account-gated; the copy path always works.
+
 ## Mobile
 
 Most practice happens on a phone, so the question screen is built for it:

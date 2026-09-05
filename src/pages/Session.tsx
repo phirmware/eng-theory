@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Code, Rich } from '@/components/Markdown'
 import { Pill } from '@/components/Bits'
+import { GoDeeper } from '@/components/GoDeeper'
 import { useSession } from '@/store/session'
 import { BUCKET_COLOR, BUCKET_LABEL } from '@/store/stats'
 
@@ -161,6 +162,15 @@ export default function Session() {
             <div className="text-[11px] uppercase tracking-wider text-accent">Takeaway</div>
             <Rich inline text={question.keyTakeaway} className="mt-1 block text-[15px] leading-relaxed" />
           </div>
+
+          <GoDeeper
+            attempt={{
+              question,
+              chosen: last.chosen,
+              correct: last.correct,
+              confidence: last.confidence,
+            }}
+          />
 
           {question.references && question.references.length > 0 && (
             <div className="text-[13px] text-muted">

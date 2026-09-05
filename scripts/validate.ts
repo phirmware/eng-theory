@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { QuestionSchema, type Question } from '../src/content/schema'
+import { buildPrompt } from '../src/deepen'
 
 const dir = path.join(process.cwd(), 'src/content/questions')
 const problems: string[] = []
@@ -49,6 +50,26 @@ if (problems.length) {
   console.error(`\n✗ ${problems.length} content problem(s):\n`)
   for (const p of problems) console.error(`  ${p}`)
   process.exit(1)
+}
+
+// "Go deeper" deep-links carry the prompt in a query string; Google truncates
+// around 2048. Catch a question that would break those links before it ships.
+const URL_CEILING = 2048
+const longLinks = all
+  .map((q) => {
+    const wrong = q.options.find((o) => !o.correct)!
+    const prompt = buildPrompt(
+      { question: q, chosen: wrong.id, correct: false, confidence: 'sure' },
+      true,
+    )
+    return { id: q.id, len: encodeURIComponent(prompt).length + 40 }
+  })
+  .filter((x) => x.len > URL_CEILING)
+
+if (longLinks.length) {
+  console.warn(`\n⚠ ${longLinks.length} question(s) exceed the ${URL_CEILING}-char deep-link budget:`)
+  for (const l of longLinks) console.warn(`  ${l.id}: ${l.len}`)
+  console.warn('  Google AI Mode will truncate these. Shorten the stem, options, or code.')
 }
 
 const by = <K extends string>(fn: (q: Question) => K) =>
