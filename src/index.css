@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0d1117;
+  --color-surface: #12181f;
+  --color-raised: #1a222c;
+  --color-line: #263140;
+  --color-muted: #8b98a9;
+  --color-accent: #4c9aff;
+  --color-good: #3fb950;
+  --color-bad: #f85149;
+  --color-warn: #d29922;
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  background: var(--color-ink);
+  color: #e6edf3;
+  font-family: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* Stop iOS grey-flashing every tap target. */
+  -webkit-tap-highlight-color: transparent;
+  /* No rubber-band bounce revealing white behind the app. */
+  overscroll-behavior-y: none;
+  /* iOS enlarges text in landscape without this. */
+  -webkit-text-size-adjust: 100%;
+}
+
+code, pre { font-family: ui-mono, ui-monospace, "SF Mono", Menlo, monospace; }
+
+/* Fixed action bar sits above the home indicator; content clears both. */
+@utility pb-safe {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+@utility scroll-clear {
+  scroll-margin-top: 1rem;
+}
+
+/* Touch devices have no hover, so give tapped elements a real pressed state. */
+@media (hover: none) {
+  .tap-press:active { transform: scale(0.99); opacity: 0.85; }
+}
