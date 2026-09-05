@@ -61,3 +61,43 @@ content validator rejects any prose that refers to an option by letter.
 
 Stored in IndexedDB, local to the browser. Export/import JSON from the footer —
 do that before clearing site data.
+
+**Progress is per-device.** Practising on your phone and your laptop gives you two
+independent schedules. Export from one and import into the other to sync.
+
+## Mobile
+
+Most practice happens on a phone, so the question screen is built for it:
+
+- Answer buttons are full-width and 52px tall, thumb-reachable at the bottom
+- Keyboard hints (`U` / `S` / `↵`) are hidden on touch devices
+- Safe-area insets keep the action bar clear of the iOS home indicator
+- New questions scroll to top; revealing scrolls the graded options into view
+- Code blocks scroll horizontally with a fade showing there is more to the right
+
+## Install as an app
+
+It is a PWA and precaches the whole bundle — questions included — so it works
+with no connection. On iOS: Share → Add to Home Screen. On Android: the install
+prompt, or menu → Install app.
+
+## Deploying to Vercel
+
+```bash
+gh repo create engineering-theory --private --source=. --push
+```
+
+Then import the repo at [vercel.com/new](https://vercel.com/new). Vercel detects
+Vite and pnpm automatically; `vercel.json` supplies the SPA rewrite and cache
+headers (immutable for hashed assets, revalidate for the service worker).
+
+Or without a repo:
+
+```bash
+pnpm dlx vercel --prod
+```
+
+Note that the build command is `pnpm validate && pnpm check:shuffle && tsc -b &&
+vite build`, so **a deploy fails if any question violates the content schema or
+the answer-position distribution skews.** That is intentional — bad content
+should not reach a device you practise on.
