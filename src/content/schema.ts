@@ -3,6 +3,8 @@ import { z } from 'zod'
 export const SECTION_IDS = [
   'distributed-systems',
   'ai-engineering',
+  'communication',
+  'leadership',
 ] as const
 
 export const QUESTION_TYPES = [
@@ -21,7 +23,7 @@ const OptionSchema = z.object({
   correct: z.boolean(),
   /** Why this is right, or the specific misconception it encodes. Required on every option. */
   why: z.string().min(40, 'every option needs a real `why` — no filler distractors'),
-})
+}).strict()
 
 export const QuestionSchema = z
   .object({
@@ -38,9 +40,10 @@ export const QuestionSchema = z
     explanation: z.string(),
     keyTakeaway: z.string().min(10).max(200),
     references: z
-      .array(z.object({ label: z.string(), url: z.string().url().optional() }))
+      .array(z.object({ label: z.string(), url: z.string().url().optional() }).strict())
       .optional(),
   })
+  .strict()
   .refine((q) => q.options.filter((o) => o.correct).length === 1, {
     message: 'exactly one option must be correct',
     path: ['options'],

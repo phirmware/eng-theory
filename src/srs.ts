@@ -1,5 +1,5 @@
 import { createEmptyCard, fsrs, generatorParameters, Rating, type Card, type Grade } from 'ts-fsrs'
-import type { Bucket } from './db'
+import type { Bucket, Recalled } from './db'
 
 const scheduler = fsrs(generatorParameters({ enable_fuzz: true, maximum_interval: 365 }))
 
@@ -13,6 +13,28 @@ const RATING_FOR: Record<Bucket, Grade> = {
   'unsure-right': Rating.Hard,
   'unsure-wrong': Rating.Again,
   'confident-wrong': Rating.Again,
+}
+
+/**
+ * Free recall is strictly harder than multiple choice, so a clean recall earns a
+ * longer interval than a clean pick — and a miss is a miss regardless of whether
+ * you would have recognised the answer in a list.
+ */
+const RATING_FOR_RECALL: Record<Recalled, Grade> = {
+  nailed: Rating.Easy,
+  partly: Rating.Hard,
+  missed: Rating.Again,
+}
+
+/** A recall self-grade expressed in the same four buckets the rest of the app uses. */
+export function bucketOfRecall(r: Recalled): Bucket {
+  if (r === 'nailed') return 'confident-right'
+  if (r === 'partly') return 'unsure-right'
+  return 'unsure-wrong'
+}
+
+export function reviewRecall(card: Card, r: Recalled, now = new Date()) {
+  return scheduler.next(card, now, RATING_FOR_RECALL[r]).card
 }
 
 export function newCard(): Card {

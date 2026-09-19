@@ -13,9 +13,9 @@ export default function SectionPage() {
 
   const topics = topicsIn(section.id).sort((a, b) => b.count - a.count)
 
-  const drill = (topic: string) => {
+  const drill = async (topic: string) => {
     const ids = questionsIn(section.id).filter((q) => q.topic === topic).map((q) => q.id)
-    start('section', `${section.title} · ${topic}`, shuffle(ids))
+    await start('section', `${section.title} · ${topic}`, shuffle(ids))
     nav('/session')
   }
 
@@ -30,7 +30,7 @@ export default function SectionPage() {
         {topics.map(({ topic, count }) => (
           <button
             key={topic}
-            onClick={() => drill(topic)}
+            onClick={() => void drill(topic)}
             className="tap-press rounded-lg border border-line bg-surface px-4 py-3.5 text-left hover:border-muted active:border-muted"
           >
             <div className="flex items-center justify-between gap-3">

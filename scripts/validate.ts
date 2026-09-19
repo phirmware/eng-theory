@@ -30,7 +30,9 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith('.json'))) {
     // Options are shuffled per session, so authored position carries no meaning.
     // Any prose that points at a letter is wrong for three readers out of four.
     // Lowercase "(a)" only, and not preceded by a letter — so "L(A) < L(B)" is fine.
-    const positional = /(?<![A-Za-z])\([a-d]\)|\b(?:option|answer) [a-d]\b/
+    // The bare form must be uppercase, or "the obvious option a reviewer will spot"
+    // trips it on the indefinite article.
+    const positional = /(?<![A-Za-z])\([a-d]\)|\b(?:option|answer) [A-D]\b/
     for (const [where, text] of [
       ['explanation', q.explanation],
       ...q.options.map((o) => [`option ${o.id}.why`, o.why] as const),

@@ -1,37 +1,91 @@
 import { create } from 'zustand'
-import { bucketOf, db, type Confidence, type Bucket } from '@/db'
+import {
+  bucketOf,
+  db,
+  RECALL_AT_STREAK,
+  type Bucket,
+  type Confidence,
+  type Mode,
+  type Recalled,
+} from '@/db'
 import { BY_ID } from '@/content'
 import type { Question } from '@/content/schema'
 import { shuffle } from '@/shuffle'
-import { clampDue, newCard, review } from '@/srs'
+import { bucketOfRecall, clampDue, newCard, review, reviewRecall } from '@/srs'
 
-export type SessionKind = 'section' | 'due' | 'blind-spots' | 'mock'
+export { shuffle }
+
+export type SessionKind = 'section' | 'due' | 'blind-spots' | 'mock' | 'mixed'
 
 export type Answered = {
   question: Question
-  chosen: string
+  chosen?: string
   correct: boolean
   confidence: Confidence
   bucket: Bucket
+  mode: Mode
+  recalled?: Recalled
+}
+
+const RECALL_PREF = 'recall-mode-enabled'
+
+export function recallEnabled() {
+  try {
+    return localStorage.getItem(RECALL_PREF) !== 'off'
+  } catch {
+    return true
+  }
+}
+
+export function setRecallEnabled(on: boolean) {
+  try {
+    localStorage.setItem(RECALL_PREF, on ? 'on' : 'off')
+  } catch {
+    /* private mode */
+  }
 }
 
 type State = {
   kind: SessionKind
   label: string
   queue: string[]
-  /** Per-question option order for this session. Authored position must never be a signal. */
   order: Record<string, string[]>
+  /** Questions promoted out of multiple choice for this session. */
+  recallIds: string[]
   index: number
   selected: string | null
   revealed: boolean
+  graded: boolean
   startedAt: number
   log: Answered[]
-  start: (kind: SessionKind, label: string, ids: string[]) => void
-  optionsFor: (q: Question) => Question['options']
+  start: (kind: SessionKind, label: string, ids: string[]) => Promise<void>
   select: (optionId: string) => void
   submit: (confidence: Confidence) => Promise<void>
+  reveal: () => void
+  gradeRecall: (r: Recalled) => Promise<void>
   next: () => void
   current: () => Question | null
+  isRecall: () => boolean
+  optionsFor: (q: Question) => Question['options']
+}
+
+/** One place that writes the card, so choice and recall stay in step. */
+async function schedule(q: Question, bucket: Bucket, recalled?: Recalled) {
+  const existing = await db.cards.get(q.id)
+  const base = existing?.card ?? newCard()
+  const next = recalled ? reviewRecall(base, recalled) : review(base, bucket)
+  const scheduled = clampDue(next, bucket)
+  const clean = bucket === 'confident-right'
+  await db.cards.put({
+    questionId: q.id,
+    section: q.section,
+    card: scheduled,
+    due: new Date(scheduled.due).getTime(),
+    lastBucket: bucket,
+    seen: (existing?.seen ?? 0) + 1,
+    streak: clean ? (existing?.streak ?? 0) + 1 : 0,
+    lapses: (existing?.lapses ?? 0) + (bucket.endsWith('wrong') ? 1 : 0),
+  })
 }
 
 export const useSession = create<State>((set, get) => ({
@@ -39,31 +93,35 @@ export const useSession = create<State>((set, get) => ({
   label: '',
   queue: [],
   order: {},
+  recallIds: [],
   index: 0,
   selected: null,
   revealed: false,
+  graded: false,
   startedAt: Date.now(),
   log: [],
 
-  start: (kind, label, ids) =>
+  start: async (kind, label, ids) => {
+    let recallIds: string[] = []
+    if (recallEnabled()) {
+      const rows = await db.cards.bulkGet(ids)
+      recallIds = ids.filter((_, i) => (rows[i]?.streak ?? 0) >= RECALL_AT_STREAK)
+    }
     set({
       kind,
       label,
       queue: ids,
+      recallIds,
       order: Object.fromEntries(
         ids.map((id) => [id, shuffle((BY_ID.get(id)?.options ?? []).map((o) => o.id))]),
       ),
       index: 0,
       selected: null,
       revealed: false,
+      graded: false,
       log: [],
       startedAt: Date.now(),
-    }),
-
-  optionsFor: (q) => {
-    const ids = get().order[q.id]
-    if (!ids) return q.options
-    return ids.map((id) => q.options.find((o) => o.id === id)!).filter(Boolean)
+    })
   },
 
   select: (optionId) => {
@@ -78,9 +136,12 @@ export const useSession = create<State>((set, get) => ({
 
     const correct = question.options.find((o) => o.id === selected)?.correct ?? false
     const bucket = bucketOf(correct, confidence)
-    set({ revealed: true, log: [...get().log, { question, chosen: selected, correct, confidence, bucket }] })
+    set({
+      revealed: true,
+      graded: true,
+      log: [...get().log, { question, chosen: selected, correct, confidence, bucket, mode: 'choice' }],
+    })
 
-    const ms = Date.now() - get().startedAt
     await db.attempts.add({
       questionId: question.id,
       section: question.section,
@@ -89,30 +150,70 @@ export const useSession = create<State>((set, get) => ({
       correct,
       confidence,
       bucket,
-      ms,
+      mode: 'choice',
+      ms: Date.now() - get().startedAt,
       at: Date.now(),
     })
+    await schedule(question, bucket)
+  },
 
-    const existing = await db.cards.get(question.id)
-    const base = existing?.card ?? newCard()
-    const scheduled = clampDue(review(base, bucket), bucket)
-    await db.cards.put({
+  reveal: () => {
+    if (get().revealed) return
+    set({ revealed: true })
+  },
+
+  gradeRecall: async (recalled) => {
+    const question = get().current()
+    if (!question || get().graded) return
+
+    const bucket = bucketOfRecall(recalled)
+    const correct = recalled !== 'missed'
+    set({
+      graded: true,
+      revealed: true,
+      log: [
+        ...get().log,
+        { question, correct, confidence: recalled === 'nailed' ? 'sure' : 'unsure', bucket, mode: 'recall', recalled },
+      ],
+    })
+
+    await db.attempts.add({
       questionId: question.id,
       section: question.section,
-      card: scheduled,
-      due: new Date(scheduled.due).getTime(),
-      lastBucket: bucket,
-      seen: (existing?.seen ?? 0) + 1,
+      topic: question.topic,
+      correct,
+      confidence: recalled === 'nailed' ? 'sure' : 'unsure',
+      bucket,
+      mode: 'recall',
+      recalled,
+      ms: Date.now() - get().startedAt,
+      at: Date.now(),
     })
+    await schedule(question, bucket, recalled)
   },
 
   next: () =>
-    set((s) => ({ index: s.index + 1, selected: null, revealed: false, startedAt: Date.now() })),
+    set((s) => ({
+      index: s.index + 1,
+      selected: null,
+      revealed: false,
+      graded: false,
+      startedAt: Date.now(),
+    })),
 
   current: () => {
     const { queue, index } = get()
     return index < queue.length ? BY_ID.get(queue[index]) ?? null : null
   },
-}))
 
-export { shuffle }
+  isRecall: () => {
+    const q = get().current()
+    return !!q && get().recallIds.includes(q.id)
+  },
+
+  optionsFor: (q) => {
+    const ids = get().order[q.id]
+    if (!ids) return q.options
+    return ids.map((id) => q.options.find((o) => o.id === id)!).filter(Boolean)
+  },
+}))

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Code, Rich } from '@/components/Markdown'
 import { Pill } from '@/components/Bits'
 import { GoDeeper } from '@/components/GoDeeper'
+import { NoteEditor, NoteRecall } from '@/components/NoteEditor'
 import { useSession } from '@/store/session'
 import { BUCKET_COLOR, BUCKET_LABEL } from '@/store/stats'
 
@@ -14,9 +15,13 @@ const DIFFICULTY_TONE: Record<string, string> = {
 
 export default function Session() {
   const nav = useNavigate()
-  const { queue, index, selected, revealed, label, select, submit, next, current, log, optionsFor } = useSession()
+  const {
+    queue, index, selected, revealed, graded, label,
+    select, submit, reveal, gradeRecall, next, current, log, optionsFor, isRecall,
+  } = useSession()
   const question = current()
   const shown = question ? optionsFor(question) : []
+  const recall = isRecall()
   const optionsRef = useRef<HTMLDivElement>(null)
 
   // New question starts at the top — otherwise you land mid-page after a long reveal.
@@ -38,11 +43,25 @@ export default function Session() {
     const onKey = (e: KeyboardEvent) => {
       if (!question) return
       const key = e.key.toLowerCase()
-      const slot = ['a', 'b', 'c', 'd'].indexOf(key)
-      if (!revealed && slot >= 0 && shown[slot]) select(shown[slot].id)
-      if (!revealed && selected && key === 's') void submit('sure')
-      if (!revealed && selected && key === 'u') void submit('unsure')
-      if (revealed && (key === 'enter' || key === ' ')) {
+      if (recall) {
+        if (!revealed && (key === 'enter' || key === ' ')) {
+          e.preventDefault()
+          reveal()
+          return
+        }
+        if (revealed && !graded) {
+          if (key === '1') void gradeRecall('missed')
+          if (key === '2') void gradeRecall('partly')
+          if (key === '3') void gradeRecall('nailed')
+          return
+        }
+      } else {
+        const slot = ['a', 'b', 'c', 'd'].indexOf(key)
+        if (!revealed && slot >= 0 && shown[slot]) select(shown[slot].id)
+        if (!revealed && selected && key === 's') void submit('sure')
+        if (!revealed && selected && key === 'u') void submit('unsure')
+      }
+      if (graded && (key === 'enter' || key === ' ')) {
         e.preventDefault()
         advance()
       }
@@ -85,6 +104,7 @@ export default function Session() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Pill tone={DIFFICULTY_TONE[question.difficulty]}>{question.difficulty}</Pill>
         <Pill>{question.type.replace(/-/g, ' ')}</Pill>
+        {recall && <Pill tone="var(--color-accent)">from memory</Pill>}
         <span className="text-xs text-muted">
           {question.topic}
           {question.subtopic && <span className="text-muted/60"> · {question.subtopic}</span>}
@@ -94,7 +114,19 @@ export default function Session() {
       <Rich text={question.stem} className="text-[17px] leading-relaxed text-[#e6edf3] sm:text-lg" />
       {question.code && <Code lang={question.code.lang} content={question.code.content} />}
 
-      <div ref={optionsRef} className="scroll-clear mt-6 space-y-2.5">
+      {recall && !revealed && (
+        <div className="mt-5 rounded-lg border border-dashed border-accent/40 bg-accent/5 p-4">
+          <div className="text-[11px] uppercase tracking-wider text-accent">From memory</div>
+          <p className="mt-1 text-[13px] leading-relaxed text-muted">
+            You have answered this cleanly twice, so the options are hidden. Answer it in your head —
+            or out loud — then reveal and grade yourself honestly.
+          </p>
+        </div>
+      )}
+
+      {recall && !revealed && <NoteRecall questionId={question.id} />}
+
+      <div ref={optionsRef} className={`scroll-clear mt-6 space-y-2.5 ${recall && !revealed ? 'hidden' : ''}`}>
         {shown.map((opt, slot) => {
           const isChosen = selected === opt.id
           const isCorrect = opt.id === correctId
@@ -134,7 +166,7 @@ export default function Session() {
         })}
       </div>
 
-      {revealed && last && (
+      {graded && last && (
         <div className="mt-8 space-y-5">
           <div
             className="rounded-lg border p-4"
@@ -169,8 +201,12 @@ export default function Session() {
               chosen: last.chosen,
               correct: last.correct,
               confidence: last.confidence,
+              mode: last.mode,
+              recalled: last.recalled,
             }}
           />
+
+          <NoteEditor questionId={question.id} />
 
           {question.references && question.references.length > 0 && (
             <div className="text-[13px] text-muted">
@@ -193,7 +229,37 @@ export default function Session() {
 
       <div className="fixed inset-x-0 bottom-0 border-t border-line bg-ink/95 backdrop-blur">
         <div className="pb-safe mx-auto flex max-w-3xl items-center gap-2.5 px-4 pt-3 sm:gap-3 sm:px-5 sm:pt-4">
-          {!revealed ? (
+          {recall && !revealed ? (
+            <button
+              onClick={reveal}
+              className="tap-press min-h-[52px] w-full rounded-lg bg-accent px-6 text-[15px] font-semibold text-ink sm:min-h-0 sm:w-auto sm:flex-1 sm:py-3 sm:text-sm"
+            >
+              Show answer
+              <span className="ml-1 hidden opacity-60 sm:inline">↵</span>
+            </button>
+          ) : recall && !graded ? (
+            <>
+              <div className="hidden flex-1 text-[13px] text-muted sm:block">How did you do?</div>
+              <button
+                onClick={() => void gradeRecall('missed')}
+                className="tap-press min-h-[52px] flex-1 rounded-lg border border-line px-2 text-[14px] font-medium hover:border-bad hover:text-bad sm:min-h-0 sm:flex-none sm:px-4 sm:py-3 sm:text-sm"
+              >
+                Missed<span className="ml-1 hidden text-muted sm:inline">1</span>
+              </button>
+              <button
+                onClick={() => void gradeRecall('partly')}
+                className="tap-press min-h-[52px] flex-1 rounded-lg border border-line px-2 text-[14px] font-medium hover:border-warn hover:text-warn sm:min-h-0 sm:flex-none sm:px-4 sm:py-3 sm:text-sm"
+              >
+                Partly<span className="ml-1 hidden text-muted sm:inline">2</span>
+              </button>
+              <button
+                onClick={() => void gradeRecall('nailed')}
+                className="tap-press min-h-[52px] flex-1 rounded-lg bg-accent px-2 text-[14px] font-semibold text-ink sm:min-h-0 sm:flex-none sm:px-4 sm:py-3 sm:text-sm"
+              >
+                Nailed<span className="ml-1 hidden opacity-60 sm:inline">3</span>
+              </button>
+            </>
+          ) : !revealed ? (
             <>
               <div className="hidden flex-1 text-[13px] text-muted sm:block">
                 {selected ? 'How sure are you?' : 'Pick an answer'}

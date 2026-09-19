@@ -1,11 +1,14 @@
 import type { Question } from '@/content/schema'
-import type { Confidence } from '@/db'
+import type { Confidence, Mode, Recalled } from '@/db'
 
 export type Attempted = {
   question: Question
-  chosen: string
+  /** Absent when the question was posed as free recall. */
+  chosen?: string
   correct: boolean
   confidence: Confidence
+  mode?: Mode
+  recalled?: Recalled
 }
 
 const letterOf = (q: Question, id: string) => {
@@ -21,9 +24,12 @@ const letterOf = (q: Question, id: string) => {
  * it — and it names the specific wrong answer, which is what makes the response
  * address your misconception rather than the topic in general.
  */
-export function buildPrompt({ question: q, chosen, correct, confidence }: Attempted, compact = false) {
+export function buildPrompt(
+  { question: q, chosen, correct, confidence, mode = 'choice', recalled }: Attempted,
+  compact = false,
+) {
   const correctOpt = q.options.find((o) => o.correct)!
-  const chosenOpt = q.options.find((o) => o.id === chosen)!
+  const chosenOpt = chosen ? q.options.find((o) => o.id === chosen) : undefined
   const topic = q.subtopic ? `${q.topic} — ${q.subtopic}` : q.topic
 
   const lines: string[] = compact
@@ -44,11 +50,17 @@ export function buildPrompt({ question: q, chosen, correct, confidence }: Attemp
     ...q.options.map((o, i) => `${'ABCD'[i]}. ${o.text}`),
     '',
     `Correct answer: ${letterOf(q, correctOpt.id)}`,
-    correct
-      ? `I got this right${confidence === 'unsure' ? ', but I was guessing.' : '.'}`
-      : `I answered ${letterOf(q, chosen)} ("${chosenOpt.text}")${
-          confidence === 'sure' ? ' and I was confident. I was wrong.' : '. I was unsure, and wrong.'
-        }`,
+    mode === 'recall'
+      ? recalled === 'nailed'
+        ? 'I answered this from memory with no options shown, and got it.'
+        : recalled === 'partly'
+          ? 'I tried to answer this from memory with no options shown, and only got part of it.'
+          : 'I tried to answer this from memory with no options shown, and could not retrieve it.'
+      : correct
+        ? `I got this right${confidence === 'unsure' ? ', but I was guessing.' : '.'}`
+        : `I answered ${letterOf(q, chosen!)} ("${chosenOpt?.text ?? ''}")${
+            confidence === 'sure' ? ' and I was confident. I was wrong.' : '. I was unsure, and wrong.'
+          }`,
   )
 
   if (!compact) {
@@ -59,18 +71,22 @@ export function buildPrompt({ question: q, chosen, correct, confidence }: Attemp
     lines.push(
       '',
       `Explain the mechanism from first principles, ${
-        correct
-          ? 'then show an edge case where the obvious answer would be wrong'
-          : `then why ${letterOf(q, chosen)} was tempting and what mental model avoids that mistake`
+        mode === 'recall' && !correct
+          ? 'then give me a mental hook that would let me reconstruct this from scratch next time'
+          : correct
+            ? 'then show an edge case where the obvious answer would be wrong'
+            : `then why ${letterOf(q, chosen!)} was tempting and what mental model avoids that mistake`
       }, with a concrete example. Technical and concise; assume I know the fundamentals.`,
     )
   } else {
     lines.push('', 'What I want from you:')
     const asks = [
       'Explain the underlying mechanism from first principles — why this is true, not just that it is.',
-      correct
-        ? 'Show me an edge case or a situation where the "obvious" answer here would actually be wrong.'
-        : `Explain why ${letterOf(q, chosen)} was tempting, what mental model produces that mistake, and what model produces the right answer.`,
+      mode === 'recall' && !correct
+        ? 'I could not retrieve this from memory. Give me a mental hook or derivation that would let me reconstruct it from first principles rather than memorise it.'
+        : correct
+          ? 'Show me an edge case or a situation where the "obvious" answer here would actually be wrong.'
+          : `Explain why ${letterOf(q, chosen!)} was tempting, what mental model produces that mistake, and what model produces the right answer.`,
       'Give one concrete real-world example, with a code or config sketch if it helps.',
       'Tell me what to learn next, and a harder follow-up question an interviewer might ask.',
     ]

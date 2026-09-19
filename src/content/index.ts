@@ -1,8 +1,10 @@
 import distributedSystems from './questions/distributed-systems.json'
 import aiEngineering from './questions/ai-engineering.json'
+import communication from './questions/communication.json'
+import leadership from './questions/leadership.json'
 import { QuestionFileSchema, type Question, type SectionId } from './schema'
 
-const raw = [...distributedSystems, ...aiEngineering]
+const raw = [...distributedSystems, ...aiEngineering, ...communication, ...leadership]
 
 // Parsed once at module load. In dev this surfaces bad content immediately;
 // `pnpm validate` runs the same schema in CI so bad questions never ship.

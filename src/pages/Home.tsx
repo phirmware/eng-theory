@@ -21,9 +21,9 @@ export default function Home() {
 
   const pct = (v: number | null) => (v === null ? '—' : `${Math.round(v * 100)}%`)
 
-  const go = (kind: Parameters<typeof start>[0], label: string, ids: string[]) => {
+  const go = async (kind: Parameters<typeof start>[0], label: string, ids: string[]) => {
     if (!ids.length) return
-    start(kind, label, ids)
+    await start(kind, label, ids)
     nav('/session')
   }
 
@@ -68,7 +68,7 @@ export default function Home() {
 
       <div className="mb-10 grid gap-3 sm:grid-cols-2">
         <button
-          onClick={() => go('due', 'Due queue', dueIds.slice(0, 25))}
+          onClick={() => void go('due', 'Due queue', dueIds.slice(0, 25))}
           disabled={!dueIds.length}
           className="tap-press rounded-lg border border-accent/40 bg-accent/10 p-4 text-left transition-colors enabled:hover:bg-accent/20 disabled:opacity-40"
         >
@@ -78,7 +78,7 @@ export default function Home() {
           </div>
         </button>
         <button
-          onClick={() => go('blind-spots', 'Blind spots', shuffle(blindSpotIds))}
+          onClick={() => void go('blind-spots', 'Blind spots', shuffle(blindSpotIds))}
           disabled={!blindSpotIds.length}
           className="tap-press rounded-lg border border-bad/40 bg-bad/10 p-4 text-left transition-colors enabled:hover:bg-bad/20 disabled:opacity-40"
         >
@@ -109,7 +109,7 @@ export default function Home() {
                     Topics
                   </button>
                   <button
-                    onClick={() => go('section', section.title, shuffle(all.map((q) => q.id)).slice(0, 20))}
+                    onClick={() => void go('section', section.title, shuffle(all.map((q) => q.id)).slice(0, 20))}
                     className="tap-press min-h-[44px] flex-1 rounded-lg bg-raised px-3 text-[14px] font-medium hover:bg-line sm:min-h-0 sm:flex-none sm:py-2 sm:text-[13px]"
                   >
                     Practise 20
